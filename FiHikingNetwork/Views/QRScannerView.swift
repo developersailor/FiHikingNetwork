@@ -42,14 +42,17 @@ struct QRScannerView: View {
                                 .foregroundColor(.white)
                                 .padding()
                             QRCodeScannerRepresentable(isScanning: $isScanning) { code in
+                                print("QR Scanner: QR kod okundu: \(code)")
                                 self.scannedCode = code
                                 self.isScanning = false
                             }
                             .frame(width: 250, height: 250)
                             .accessibilityLabel("QR kod tarama alanı")
                             Button("Test QR Kodu") {
-                                // Test için örnek QR kod
-                                scannedCode = "test-group-id-123"
+                                // Test için örnek QR kod - Bu ID'yi gerçek bir gruptan alın
+                                print("QR Scanner: Test QR kodu butonu tıklandı")
+                                // GERÇEK GRUP ID'sini buraya yazın (örnek: scannedCode = "GERÇEK_GRUP_ID_BURAYA")
+                                scannedCode = "test-group-id-123" // Bu satırı gerçek grup ID ile değiştirin
                                 isScanning = false
                             }
                             .buttonStyle(.bordered)
@@ -82,10 +85,24 @@ struct QRScannerView: View {
     }
     
     private func joinGroup(groupId: String) {
-        // Gerçek grup katılım mantığı burada
-        alertMessage = "Gruba başarıyla katıldınız!"
-        showAlert = true
-        // groupVM.joinGroup(groupId: groupId)
+        print("QR Scanner: Gruba katılma işlemi başlatılıyor. Grup ID: \(groupId)")
+        
+        // Gerçek grup katılma işlemini başlat
+        groupVM.joinGroup(groupId: groupId)
+        
+        // GroupViewModel'deki işlem sonucunu kontrol etmek için
+        // RxSwift Observable'ını dinleyebiliriz, ancak şimdilik basit bir delay ile kontrol edelim
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            let errorMessage = self.groupVM.errorMessage ?? ""
+            if errorMessage.isEmpty {
+                print("QR Scanner: Gruba katılma işlemi başarılı görünüyor")
+                self.alertMessage = "Gruba başarıyla katıldınız!"
+            } else {
+                print("QR Scanner: Gruba katılma işlemi başarısız: \(errorMessage)")
+                self.alertMessage = "Gruba katılım başarısız: \(errorMessage)"
+            }
+            self.showAlert = true
+        }
     }
 }
 

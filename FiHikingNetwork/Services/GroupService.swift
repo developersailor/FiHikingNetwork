@@ -2,15 +2,22 @@ import FirebaseFirestore
 import RxSwift
 
 class GroupService: BaseService {
-    func createGroup(name: String, memberIDs: [String], leaderId: String) -> Single<Void> {
+    func createGroup(name: String, memberIDs: [String], leaderId: String) -> Single<String> {
         let groupId = UUID().uuidString
         var groupData: [String: Any] = [
             "id": groupId,
             "name": name,
             "leaderId": leaderId // Adding leaderId to comply with Firestore rules
         ]
-        groupData["members"] = memberIDs
+        // Leader'ı da üye listesine ekle
+        var allMembers = memberIDs
+        if !allMembers.contains(leaderId) {
+            allMembers.append(leaderId)
+        }
+        groupData["members"] = allMembers
+        
         return addDocument(collection: "groups", data: groupData)
+            .map { groupId } // Grup ID'sini döndür
     }
 
     func deleteGroup(groupId: String) -> Single<Void> {

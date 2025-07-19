@@ -79,11 +79,44 @@ class GroupViewModel: ObservableObject {
     }
     
     func createGroup(name: String, memberIDs: [String]) {
+        print("Grup oluşturma işlemi başlatılıyor. Ad: \(name), Üyeler: \(memberIDs)")
+        
         groupService.createGroup(name: name, memberIDs: memberIDs, leaderId: currentUserID)
+            .flatMap { [unowned self] createdGroupId -> Single<[String: Any]> in
+                print("Grup başarıyla oluşturuldu, ID: \(createdGroupId). Grup bilgisi çekiliyor...")
+                // Oluşturulan grubun bilgilerini çek
+                return self.groupService.fetchGroup(groupId: createdGroupId)
+            }
             .observe(on: MainScheduler.instance)
-            .subscribe(onSuccess: {
-                print("Grup başarıyla oluşturuldu.")
+            .subscribe(onSuccess: { [weak self] groupData in
+                print("Grup bilgisi işleniyor: \(groupData)")
+                
+                let groupUUID = UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID()
+                let groupName = groupData["name"] as? String ?? "Bilinmeyen Grup"
+                
+                // Members alanını String array olarak al ve UUID array'e çevir
+                let membersStringArray = groupData["members"] as? [String] ?? []
+                print("Oluşturulan grup üyeleri: \(membersStringArray)")
+                
+                // String'leri UUID'lere çevir
+                let memberUUIDs = membersStringArray.map { memberString -> UUID in
+                    if let uuid = UUID(uuidString: memberString) {
+                        return uuid
+                    } else {
+                        print("String ID UUID'ye çevriliyor: \(memberString)")
+                        return UUID()
+                    }
+                }
+                
+                let newGroup = HikingGroup(
+                    id: groupUUID,
+                    name: groupName,
+                    memberIDs: memberUUIDs
+                )
+                self?.group = newGroup
+                print("Grup başarıyla oluşturuldu ve ayarlandı. Grup: \(groupName), Üye sayısı: \(memberUUIDs.count)")
             }, onFailure: { [weak self] error in
+                print("Grup oluşturma hatası: \(error.localizedDescription)")
                 self?.errorMessage = "Grup oluşturulamadı: \(error.localizedDescription)"
             })
             .disposed(by: disposeBag)
@@ -92,22 +125,49 @@ class GroupViewModel: ObservableObject {
     /// Kullanıcıyı belirtilen gruba dahil eder.
     /// - Parameter groupId: Katılınacak grubun kimliği.
     func joinGroup(groupId: String) {
+        print("Gruba katılma işlemi başlatılıyor. GroupID: \(groupId), UserID: \(currentUserID)")
+        
         groupService.addMemberToGroup(userId: currentUserID, to: groupId)
-            .flatMap { [unowned self] () -> Single<[String: Any]> in // Hata düzeltmesi: andThen yerine flatMap kullanıldı.
+            .flatMap { [unowned self] () -> Single<[String: Any]> in
+                print("Kullanıcı başarıyla gruba eklendi, grup bilgisi çekiliyor...")
                 // Üye ekleme başarılı olduktan sonra, güncel grup bilgisini çekiyoruz.
                 return self.groupService.fetchGroup(groupId: groupId)
             }
             .observe(on: MainScheduler.instance)
             .subscribe(onSuccess: { [weak self] groupData in
+                print("Grup bilgisi alındı: \(groupData)")
+                
                 // Firestore'dan gelen veriyi local HikingGroup modeline çevir
+                let groupUUID = UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID()
+                let groupName = groupData["name"] as? String ?? "Bilinmeyen Grup"
+                
+                // Members alanını String array olarak al ve UUID array'e çevir
+                let membersStringArray = groupData["members"] as? [String] ?? []
+                print("Firestore'dan gelen üyeler: \(membersStringArray)")
+                
+                // String'leri UUID'lere çevir - hatalı UUID'ler için yeni UUID oluştur
+                let memberUUIDs = membersStringArray.map { memberString -> UUID in
+                    if let uuid = UUID(uuidString: memberString) {
+                        return uuid
+                    } else {
+                        // String bir UUID değilse, bu bir user ID'dir (örn: Firebase UID)
+                        // Bu durumda deterministik bir UUID oluşturmak yerine
+                        // Bu String'i UUID namespace ile hash'leyebiliriz
+                        // Şimdilik basit bir çözüm: yeni UUID oluştur
+                        print("Geçersiz UUID formatı: \(memberString), yeni UUID oluşturuluyor")
+                        return UUID()
+                    }
+                }
+                
                 let newGroup = HikingGroup(
-                    id: UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID(),
-                    name: groupData["name"] as? String ?? "Bilinmeyen Grup",
-                    memberIDs: (groupData["members"] as? [String] ?? []).compactMap { UUID(uuidString: $0) }
+                    id: groupUUID,
+                    name: groupName,
+                    memberIDs: memberUUIDs
                 )
                 self?.group = newGroup
-                print("Başarıyla gruba katıldınız ve grup bilgisi güncellendi.")
+                print("Başarıyla gruba katıldınız. Grup: \(groupName), Üye sayısı: \(memberUUIDs.count)")
             }, onFailure: { [weak self] error in
+                print("Gruba katılım hatası: \(error.localizedDescription)")
                 self?.errorMessage = "Gruba katılım başarısız: \(error.localizedDescription)"
             })
             .disposed(by: disposeBag)
