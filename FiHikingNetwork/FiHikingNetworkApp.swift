@@ -40,6 +40,10 @@ struct FiHikingNetworkApp: App {
                 // Kullanıcı çıkış yaptıysa veya oturum açılamadıysa onboarding ekranı göster.
                 OnboardingView(userVM: userViewModel)
                     .environmentObject(appViewModel)
+                    .onAppear {
+                        // UserViewModel'den cache'lenen profili yükle
+                        userViewModel.loadUserFromCache()
+                    }
             case .error(let message):
                 // Bir hata oluşursa, kullanıcıya bilgi ver.
                 VStack(spacing: 16) {

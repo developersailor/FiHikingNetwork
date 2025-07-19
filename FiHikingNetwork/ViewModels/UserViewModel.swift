@@ -6,9 +6,7 @@ class UserViewModel: ObservableObject {
     @Published var user: User?
     
     init() {
-        Task {
-            await loadUserFromCache()
-        }
+        loadUserFromCache()
     }
     
     func updateUser(_ newUser: User) {
@@ -16,16 +14,17 @@ class UserViewModel: ObservableObject {
         LocalDataManager.shared.saveUser(newUser)
     }
     
-    func loadUserFromCache() async {
-        if let cachedUser = await LocalDataManager.shared.loadUser() {
+    func loadUserFromCache() {
+        if let cachedUser = LocalDataManager.shared.loadUser() {
             self.user = cachedUser
+            print("✅ UserViewModel: Cache'den kullanıcı yüklendi: \(cachedUser.name)")
+        } else {
+            print("❌ UserViewModel: Cache'de kullanıcı bulunamadı")
         }
     }
     
     func deleteUser() {
         self.user = nil
-        Task {
-            await LocalDataManager.shared.deleteUser()
-        }
+        LocalDataManager.shared.deleteUser()
     }
 } 

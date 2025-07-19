@@ -28,6 +28,16 @@ class AppViewModel: ObservableObject {
     
     init(authService: AuthService = AuthService()) {
         self.authService = authService
+        
+        // Önce cache'den profil kontrolü yap
+        if LocalDataManager.shared.loadUser() != nil {
+            self.hasUserProfile = true
+            print("✅ AppViewModel Init: Cache'de profil bulundu")
+        } else {
+            self.hasUserProfile = false
+            print("❌ AppViewModel Init: Cache'de profil bulunamadı")
+        }
+        
         setupBindings()
         signInUser()
     }
@@ -49,13 +59,24 @@ class AppViewModel: ObservableObject {
     private func updateAppState(userID: String?) {
         if let userID = userID, !userID.isEmpty {
             // Kullanıcı giriş yapmış, profil kontrolü yap
-            if hasUserProfile {
-                self.appState = .signedIn
-            } else {
-                self.appState = .signedOut // Onboarding göster
-            }
+            checkUserProfile()
         } else {
             self.appState = .signedOut
+            self.hasUserProfile = false
+        }
+    }
+    
+    /// Cache'den kullanıcı profilini kontrol et
+    private func checkUserProfile() {
+        let localDataManager = LocalDataManager.shared
+        if let cachedUser = localDataManager.loadUser() {
+            print("✅ Cache'den kullanıcı profili bulundu: \(cachedUser.name)")
+            self.hasUserProfile = true
+            self.appState = .signedIn
+        } else {
+            print("❌ Cache'de kullanıcı profili bulunamadı")
+            self.hasUserProfile = false
+            self.appState = .signedOut // Onboarding göster
         }
     }
     

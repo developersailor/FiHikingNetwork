@@ -47,6 +47,9 @@ struct OnboardingView: View {
                 
                 Spacer()
             }
+            .onAppear {
+                loadExistingProfile()
+            }
             .alert(isPresented: $showAlert) {
                 Alert(title: Text("Eksik Bilgi"), message: Text("Lütfen tüm alanları doldurun."), dismissButton: .default(Text("Tamam")))
             }
@@ -89,5 +92,17 @@ struct OnboardingView: View {
         
         print("✅ Profile skipped, notifying AppViewModel")
         appViewModel.setUserProfileCreated()
+    }
+    
+    private func loadExistingProfile() {
+        // Cache'den var olan profili yükle
+        if let existingUser = userVM.user {
+            print("✅ OnboardingView: Mevcut profil bulundu: \(existingUser.name)")
+            name = existingUser.name
+            username = existingUser.username
+            phone = existingUser.phone
+        } else {
+            print("❌ OnboardingView: Cache'de profil bulunamadı")
+        }
     }
 }
