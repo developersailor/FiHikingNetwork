@@ -39,26 +39,40 @@ class MapViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     func requestLocationPermission() {
+        print("🗺️ MapViewModel: Requesting location permission")
         locationAuthorizationStatus = locationManager.authorizationStatus
         
         switch locationAuthorizationStatus {
         case .notDetermined:
+            print("🗺️ MapViewModel: Location permission not determined, requesting...")
             locationManager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
+            print("✅ MapViewModel: Location permission granted, starting updates")
             startLocationUpdates()
         case .denied, .restricted:
+            print("❌ MapViewModel: Location permission denied")
             locationError = "Konum izni reddedildi. Ayarlardan konum iznini etkinleştirin."
         @unknown default:
+            print("⚠️ MapViewModel: Unknown location permission status")
             locationError = "Bilinmeyen konum izni durumu"
         }
     }
     
     func startLocationUpdates() {
         guard CLLocationManager.locationServicesEnabled() else {
+            print("❌ MapViewModel: Location services disabled on device")
             locationError = "Konum servisleri devre dışı"
             return
         }
         
+        guard locationAuthorizationStatus == .authorizedWhenInUse || 
+              locationAuthorizationStatus == .authorizedAlways else {
+            print("❌ MapViewModel: No location permission")
+            locationError = "Konum izni verilmedi"
+            return
+        }
+        
+        print("✅ MapViewModel: Starting location updates")
         locationManager.startUpdatingLocation()
         isLocationEnabled = true
         locationError = nil
@@ -93,6 +107,8 @@ class MapViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         Task { @MainActor in
             let coordinate = location.coordinate
+            print("🗺️ MapViewModel: Location updated - Lat: \(coordinate.latitude), Lon: \(coordinate.longitude)")
+            
             userLocation = coordinate
             
             // Kullanıcının kendi konumunu da userLocations'a ekle
@@ -100,11 +116,15 @@ class MapViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
             
             // Harita merkezini kullanıcı konumuna güncelle (sadece ilk kez)
             if region.center.latitude == 39.92 && region.center.longitude == 32.85 {
+                print("🗺️ MapViewModel: Centering map on user location")
                 region = MKCoordinateRegion(
                     center: coordinate,
                     span: MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
                 )
             }
+            
+            // Konum hatasını temizle
+            locationError = nil
         }
     }
     
@@ -117,26 +137,33 @@ class MapViewModel: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     nonisolated func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         Task { @MainActor in
+            print("🗺️ MapViewModel: Location authorization changed to: \(status.rawValue)")
             locationAuthorizationStatus = status
             
             // Arka plan konum iznini güncelle
             #if !targetEnvironment(simulator)
             if status == .authorizedAlways {
                 locationManager.allowsBackgroundLocationUpdates = true
+                print("✅ MapViewModel: Background location updates enabled")
             } else {
                 locationManager.allowsBackgroundLocationUpdates = false
+                print("⚠️ MapViewModel: Background location updates disabled")
             }
             #endif
             
             switch status {
             case .authorizedWhenInUse, .authorizedAlways:
+                print("✅ MapViewModel: Location permission granted, starting updates")
                 startLocationUpdates()
             case .denied, .restricted:
+                print("❌ MapViewModel: Location permission denied/restricted")
                 locationError = "Konum izni reddedildi. Ayarlardan konum iznini etkinleştirin."
                 isLocationEnabled = false
             case .notDetermined:
+                print("🗺️ MapViewModel: Location permission not determined")
                 break
             @unknown default:
+                print("⚠️ MapViewModel: Unknown location authorization status")
                 locationError = "Bilinmeyen konum izni durumu"
             }
         }

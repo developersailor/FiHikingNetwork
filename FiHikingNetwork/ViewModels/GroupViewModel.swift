@@ -141,9 +141,14 @@ class GroupViewModel: ObservableObject {
                 let groupUUID = UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID()
                 let groupName = groupData["name"] as? String ?? "Bilinmeyen Grup"
                 
+                // Group leader bilgisini al
+                let leaderIdString = groupData["leaderId"] as? String
+                let leaderUUID = leaderIdString != nil ? UUID(uuidString: leaderIdString!) : nil
+                
                 // Members alanını String array olarak al ve UUID array'e çevir
                 let membersStringArray = groupData["members"] as? [String] ?? []
                 print("Firestore'dan gelen üyeler: \(membersStringArray)")
+                print("Firestore'dan gelen grup lideri: \(leaderIdString ?? "Belirtilmemiş")")
                 
                 // String'leri UUID'lere çevir - hatalı UUID'ler için yeni UUID oluştur
                 let memberUUIDs = membersStringArray.map { memberString -> UUID in
@@ -162,10 +167,11 @@ class GroupViewModel: ObservableObject {
                 let newGroup = HikingGroup(
                     id: groupUUID,
                     name: groupName,
-                    memberIDs: memberUUIDs
+                    memberIDs: memberUUIDs,
+                    leaderId: leaderUUID // Grup lideri bilgisini set et
                 )
                 self?.group = newGroup
-                print("Başarıyla gruba katıldınız. Grup: \(groupName), Üye sayısı: \(memberUUIDs.count)")
+                print("Başarıyla gruba katıldınız. Grup: \(groupName), Üye sayısı: \(memberUUIDs.count), Lider: \(leaderIdString ?? "Bilinmeyen")")
             }, onFailure: { [weak self] error in
                 print("Gruba katılım hatası: \(error.localizedDescription)")
                 self?.errorMessage = "Gruba katılım başarısız: \(error.localizedDescription)"
@@ -176,7 +182,14 @@ class GroupViewModel: ObservableObject {
     // MARK: - Private Helper Methods
     
     private func updateUserLocationInFirestore(_ location: CLLocation) {
-        guard let groupId = group?.id.uuidString else { return }
+        guard let groupId = group?.id.uuidString else {
+            print("❌ GroupViewModel: Cannot update location - no active group")
+            return
+        }
+        
+        print("🗺️ GroupViewModel: Updating location for group \(groupId)")
+        print("🗺️ GroupViewModel: Current user: \(currentUserID)")
+        print("🗺️ GroupViewModel: Location: \(location.coordinate.latitude), \(location.coordinate.longitude)")
         
         isUpdatingLocation = true
         
@@ -188,8 +201,10 @@ class GroupViewModel: ObservableObject {
         )
         .observe(on: MainScheduler.instance)
         .subscribe(onSuccess: { [weak self] in
+            print("✅ GroupViewModel: Location update successful")
             self?.isUpdatingLocation = false
         }, onFailure: { [weak self] error in
+            print("❌ GroupViewModel: Location update failed - \(error.localizedDescription)")
             self?.isUpdatingLocation = false
             self?.errorMessage = "Konum güncellenemedi: \(error.localizedDescription)"
         })

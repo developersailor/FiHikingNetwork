@@ -1,9 +1,13 @@
 # Test Rehberi - FiHikingNetwork
 
-## Yeni Özellikler
-✅ **Anonim Giriş Butonu**: AuthView'de "Anonim Giriş" butonu eklendi
-✅ **Onboarding Akışı**: Profil oluşturulduktan sonra otomatik ana ekrana geçiş
-✅ **Profil Atlama**: "Atla" butonu ile boş profil oluşturma
+## Konum Güncellenemedi Hatası - Düzeltildi ✅
+
+### Yapılan Düzeltmeler:
+✅ **Konum Koleksiyonu**: `locations` → `memberLocations` olarak değiştirildi
+✅ **Detailed Logging**: Tüm konum işlemlerinde kapsamlı log mesajları eklendi
+✅ **Firebase Security Rules**: `memberLocations` koleksiyonu için güncellendi
+✅ **Location Manager**: Konum izinleri ve hata kontrolü geliştirildi
+✅ **Document Structure**: Firestore document path'i düzeltildi
 
 ## Test Senaryoları
 
@@ -13,37 +17,60 @@
 3. Firebase Console'da anonymous user oluşturulduğunu kontrol edin
 4. Profil oluşturma ekranına geçtiğini doğrulayın
 
-### 2. Profil Oluşturma Testi
-1. Anonim girişten sonra profil ekranında:
-   - İsim, kullanıcı adı ve telefon bilgilerini girin
-   - **"Profil Oluştur"** butonuna tıklayın
-2. Ana uygulamaya geçtiğini doğrulayın
+### 2. Konum İzni Testi
+1. Anonim girişten sonra
+2. iOS Settings > Privacy & Security > Location Services'e gidin
+3. FiHikingNetwork uygulaması için "While Using App" seçin
+4. Uygulamaya döndüğünüzde konum güncellemelerinin başladığını kontrol edin
 
-### 3. Profil Atlama Testi
-1. Profil ekranında **"Atla"** butonuna tıklayın
-2. Otomatik profil oluşturulup ana uygulamaya geçtiğini doğrulayın
+### 3. Konum Güncelleme Testi  
+1. Profil oluşturduktan sonra grup oluşturun
+2. Konsol loglarında şu mesajları arayın:
+   - `🗺️ MapViewModel: Location updated - Lat: X, Lon: Y`
+   - `🗺️ GroupViewModel: Updating location for group [groupId]`
+   - `✅ LocationService: Location updated successfully`
 
 ### 4. Grup İşlemleri Testi
 1. Ana ekranda grup oluşturun
 2. QR kod ile grup paylaşın
 3. Başka bir cihazda QR kod okutarak gruba katılın
-4. Konsol loglarında işlemleri takip edin
+4. Firebase Console'da `groups/{groupId}/memberLocations` koleksiyonunu kontrol edin
 
-## Konsol Mesajları
-- `✅ Profile created, notifying AppViewModel`
-- `✅ Profile skipped, notifying AppViewModel` 
-- `Anonim giriş başarılı: [userID]`
-- `Group joined successfully`
-- `QR Scanner: [detaylı mesajlar]`
+## Debug Konsol Mesajları
+
+### Başarılı Konum Güncellemeleri:
+- `🗺️ MapViewModel: Requesting location permission`
+- `✅ MapViewModel: Location permission granted, starting updates`  
+- `🗺️ MapViewModel: Location updated - Lat: [lat], Lon: [lon]`
+- `🗺️ GroupViewModel: Updating location for group [groupId]`
+- `🗺️ LocationService: Updating location for user [userId]`
+- `✅ LocationService: Location updated successfully`
+
+### Hata Durumları:
+- `❌ MapViewModel: Location permission denied`
+- `❌ LocationService: Location update failed - [error]`
+- `❌ GroupViewModel: Location update failed - [error]`
 
 ## Firebase Console Kontrolleri
-1. Authentication > Users: Anonim kullanıcılar görünmeli
-2. Firestore > groups: Grup dokümanları oluşturulmalı
-3. Firestore > groups/{groupId}/memberLocations: Konum dokümanları
+1. **Authentication > Users**: Anonim kullanıcılar görünmeli
+2. **Firestore > groups**: Grup dokümanları oluşturulmalı  
+3. **Firestore > groups/{groupId}/memberLocations**: Konum dokümanları burada olmalı (artık `locations` değil!)
 
-## Hata Durumları
-- Network hatası: Hata mesajı gösterilmeli
-- Firebase kuralları: Erişim reddedilirse hata logu
-- QR kod okuma hatası: Kullanıcıya bilgi verilmeli
+## Firebase Güvenlik Kuralları
+`firestore_rules_fixed.txt` dosyasındaki kuralları Firebase Console'da uygulayın:
 
-Tüm testleri tamamladıktan sonra Firebase güvenlik kurallarını `firestore_rules_fixed.txt` dosyasından uygulayın!
+```javascript
+// Grup içi konumlar: grup üyesi olanlar tüm konumları okuyabilir, sadece kendi konumunu yazabilir
+match /groups/{groupId}/memberLocations/{userId} {
+  // Grup üyesi olanlar tüm konumları okuyabilir (harita görünümü için gerekli)
+  allow read: if request.auth != null && 
+                 (request.auth.uid == userId || 
+                  exists(/databases/$(database)/documents/groups/$(groupId)) && 
+                  request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.members);
+  
+  // Sadece kendi konum dokümanını yazabilir
+  allow write: if request.auth != null && request.auth.uid == userId;
+}
+```
+
+Artık konum güncelleme hatası çözülmüş olmalı! 🗺️✅

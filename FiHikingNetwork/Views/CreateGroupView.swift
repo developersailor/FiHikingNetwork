@@ -64,7 +64,18 @@ struct CreateGroupView: View {
     }
     
     private func createGroup() {
-        let newGroup = HikingGroup(id: UUID(), name: groupName, memberIDs: [])
+        // Mevcut kullanıcı ID'sini al
+        let currentUserId = groupVM.currentUserID
+        
+        // UUID formatına çevir
+        let currentUserUUID = UUID(uuidString: currentUserId) ?? UUID()
+        let newGroup = HikingGroup(
+            id: UUID(), 
+            name: groupName, 
+            memberIDs: [currentUserUUID], // Grup liderini üye listesine ekle
+            leaderId: currentUserUUID // Grup lideri bilgisini set et
+        )
+        
         createdGroup = newGroup
         groupVM.group = newGroup
         showQRCode = true
@@ -75,14 +86,15 @@ struct CreateGroupView: View {
 
         let groupData: [String: Any] = [
             "name": newGroup.name,
-            "members": newGroup.memberIDs.map { $0.uuidString }
+            "members": newGroup.memberIDs.map { $0.uuidString },
+            "leaderId": newGroup.leaderId?.uuidString ?? currentUserId // Grup lideri bilgisini Firebase'e kaydet
         ]
 
         groupRef.setData(groupData) { error in
             if let error = error {
-                print("Grup Firestore'a eklenemedi: \(error.localizedDescription)")
+                print("❌ CreateGroupView: Grup Firestore'a eklenemedi: \(error.localizedDescription)")
             } else {
-                print("Grup Firestore'a başarıyla eklendi.")
+                print("✅ CreateGroupView: Grup Firestore'a başarıyla eklendi. Lider: \(currentUserId)")
             }
         }
     }

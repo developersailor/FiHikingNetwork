@@ -19,18 +19,7 @@ struct GroupMapView: View {
             Map(position: $mapPosition) {
                 // ViewModel'den gelen üye konumlarını haritada göster
                 ForEach(viewModel.memberLocations) { member in
-                    Annotation(member.id, coordinate: member.coordinate) {
-                        // Mevcut kullanıcıyı farklı bir renkle göster
-                        let isCurrentUser = member.id == viewModel.currentUserID
-                        Image(systemName: "figure.hiking")
-                            .font(.title2)
-                            .foregroundColor(isCurrentUser ? .blue : .black)
-                            .background(
-                                Circle()
-                                    .fill(isCurrentUser ? Color.blue.opacity(0.2) : Color.gray.opacity(0.2))
-                                    .frame(width: 40, height: 40)
-                            )
-                    }
+                    memberAnnotation(for: member)
                 }
             }
             .mapStyle(.standard(elevation: .realistic)) // Daha gerçekçi bir harita stili
@@ -58,6 +47,91 @@ struct GroupMapView: View {
     /// View ilk yüklendiğinde yapılacak işlemler.
     private func setupView() {
         viewModel.startLocationTracking()
+    }
+    
+    /// Üye için harita annotation'ı oluşturur
+    private func memberAnnotation(for member: MemberLocation) -> some MapContent {
+        Annotation(member.id, coordinate: member.coordinate) {
+            // Kullanıcı türlerini belirle
+            let isCurrentUser = member.id == viewModel.currentUserID
+            let isGroupLeader = member.id == (viewModel.group?.leaderId?.uuidString ?? "")
+            
+            VStack {
+                // Üye türüne göre farklı simge ve renkler
+                if isCurrentUser {
+                    currentUserView()
+                } else if isGroupLeader {
+                    groupLeaderView()
+                } else {
+                    memberView()
+                }
+            }
+        }
+    }
+    
+    /// Mevcut kullanıcı görünümü
+    private func currentUserView() -> some View {
+        VStack {
+            Image(systemName: "figure.hiking")
+                .font(.title2)
+                .foregroundColor(.blue)
+                .background(
+                    Circle()
+                        .fill(Color.blue.opacity(0.3))
+                        .frame(width: 50, height: 50)
+                )
+            Text("Sen")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.blue)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.blue.opacity(0.2))
+                .cornerRadius(12)
+        }
+    }
+    
+    /// Grup lideri görünümü
+    private func groupLeaderView() -> some View {
+        VStack {
+            Image(systemName: "crown.fill")
+                .font(.title2)
+                .foregroundColor(.orange)
+                .background(
+                    Circle()
+                        .fill(Color.orange.opacity(0.3))
+                        .frame(width: 50, height: 50)
+                )
+            Text("Lider")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.orange)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.orange.opacity(0.2))
+                .cornerRadius(12)
+        }
+    }
+    
+    /// Normal üye görünümü
+    private func memberView() -> some View {
+        VStack {
+            Image(systemName: "figure.hiking")
+                .font(.title2)
+                .foregroundColor(.gray)
+                .background(
+                    Circle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                )
+            Text("Üye")
+                .font(.caption)
+                .foregroundColor(.gray)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(10)
+        }
     }
 }
 

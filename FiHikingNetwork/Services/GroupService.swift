@@ -1,4 +1,5 @@
 import FirebaseFirestore
+import FirebaseAuth
 import RxSwift
 
 class GroupService: BaseService {
@@ -29,26 +30,48 @@ class GroupService: BaseService {
     }
 
     func updateLocation(groupId: String, userId: String, latitude: Double, longitude: Double) -> Single<Void> {
+        print("🗺️ LocationService: Updating location for user \(userId) in group \(groupId)")
+        print("🗺️ LocationService: Coordinates - Lat: \(latitude), Lon: \(longitude)")
+        
         let locationData: [String: Any] = [
             "userId": userId,
             "latitude": latitude,
             "longitude": longitude,
             "timestamp": FieldValue.serverTimestamp()
         ]
-        return addDocument(collection: "groups/\(groupId)/locations", data: locationData)
+        
+        let locationRef = db.collection("groups").document(groupId).collection("memberLocations").document(userId)
+        
+        return Single.create { observer in
+            locationRef.setData(locationData, merge: true) { error in
+                if let error = error {
+                    print("❌ LocationService: Location update failed - \(error.localizedDescription)")
+                    observer(.failure(error))
+                } else {
+                    print("✅ LocationService: Location updated successfully for user \(userId)")
+                    observer(.success(()))
+                }
+            }
+            return Disposables.create()
+        }
     }
 
     func fetchLocations(groupId: String) -> Single<[MemberLocation]> {
-        return fetchDocuments(collection: "groups/\(groupId)/locations").map { documents in
-            documents.compactMap { data -> MemberLocation? in
+        print("🗺️ LocationService: Fetching member locations for group \(groupId)")
+        
+        return fetchDocuments(collection: "groups/\(groupId)/memberLocations").map { documents in
+            let locations = documents.compactMap { data -> MemberLocation? in
                 guard let id = data["userId"] as? String,
                       let latitude = data["latitude"] as? Double,
                       let longitude = data["longitude"] as? Double,
                       let timestamp = data["timestamp"] as? Timestamp else {
+                    print("⚠️ LocationService: Invalid location data - \(data)")
                     return nil
                 }
                 return MemberLocation(id: id, latitude: latitude, longitude: longitude, timestamp: timestamp)
             }
+            print("✅ LocationService: Found \(locations.count) member locations")
+            return locations
         }
     }
 
@@ -56,16 +79,37 @@ class GroupService: BaseService {
     /// - Parameter groupId: Dinlenecek grubun kimliği.
     /// - Returns: Konum güncellemelerini içeren bir `Observable`.
     func listenForLocationUpdates(groupId: String) -> Observable<[MemberLocation]> {
-        let locationsCollection = db.collection("groups/\(groupId)/locations")
+        print("🔄 LocationService: Starting to listen for location updates in group \(groupId)")
+        
+        // Firebase Auth durumunu kontrol et
+        if let currentUser = Auth.auth().currentUser {
+            print("🔄 LocationService: Authenticated user: \(currentUser.uid)")
+        } else {
+            print("❌ LocationService: No authenticated user found!")
+        }
+        
+        let locationsCollection = db.collection("groups").document(groupId).collection("memberLocations")
         
         return Observable.create { observer in
             let listener = locationsCollection.addSnapshotListener { snapshot, error in
                 if let error = error {
+                    print("❌ LocationService: Location listener error - \(error.localizedDescription)")
+                    
+                    // Firebase Auth hatası mı kontrol et
+                    if error.localizedDescription.contains("permissions") || error.localizedDescription.contains("PERMISSION_DENIED") {
+                        print("❌ LocationService: Firebase Security Rules hatası - Lütfen Console'da rules'ları kontrol edin")
+                        print("❌ LocationService: Grup ID: \(groupId)")
+                        if let user = Auth.auth().currentUser {
+                            print("❌ LocationService: User ID: \(user.uid)")
+                        }
+                    }
+                    
                     observer.onError(error)
                     return
                 }
                 
                 guard let documents = snapshot?.documents else {
+                    print("⚠️ LocationService: No location documents found")
                     observer.onNext([])
                     return
                 }
@@ -75,16 +119,19 @@ class GroupService: BaseService {
                     guard let latitude = data["latitude"] as? Double,
                           let longitude = data["longitude"] as? Double,
                           let timestamp = data["timestamp"] as? Timestamp else {
+                        print("⚠️ LocationService: Invalid location document - \(doc.documentID): \(data)")
                         return nil
                     }
                     return MemberLocation(id: doc.documentID, latitude: latitude, longitude: longitude, timestamp: timestamp)
                 }
                 
+                print("✅ LocationService: Received \(locations.count) location updates")
                 observer.onNext(locations)
             }
             
             return Disposables.create {
                 listener.remove()
+                print("🔄 LocationService: Location listener removed for group \(groupId)")
             }
         }
     }
