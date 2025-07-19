@@ -27,27 +27,15 @@ FiHikingNetwork, hiking yapan grupların birbirini kaybetmemesi ve güvenli bir 
 - Accessibility desteği
 - VoiceOver uyumluluğu
 
-## � Ekran Görüntüleri
+## 📷 Ekran Görüntüleri
 
 <div align="center">
-
-### Ana Ekran ve Profil Oluşturma
-<p align="center">
-  <img src="docs/screenshots/1.png" width="250" alt="Main Screen"/>
-</p>
->
-
-### Harita ve Konum Takibi
-<p align="center">
-  <img src="docs/screenshots/4.png" width="250" alt="Group Map"/>
-</p>
-
-### Kullanıcı Profili
-<p align="center">
-  <img src="docs/screenshots/3.png" width="250" alt="Edit Profile"/>
-</p>
-
-
+    <p align="center">
+        <img src="docs/screenshots/1.png" width="250" alt="Main Screen"/>
+        <img src="docs/screenshots/2.png" width="250" alt="Group Map"/>
+        <img src="docs/screenshots/3.png" width="250" alt="Edit Profile"/>
+        <img src="docs/screenshots/4.png" width="250" alt="Group Map"/>
+    </p>
 </div>
 
 ## �📋 Gereksinimler
