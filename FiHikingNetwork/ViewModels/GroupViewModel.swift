@@ -1,11 +1,12 @@
 import Foundation
 import CoreLocation
+import Combine
 import RxSwift
 import RxCocoa
 import FirebaseFirestore
-import Combine // Hata düzeltmesi: Publisher için Combine import edildi
 
-/// Grup yönetimi, konum güncellemeleri ve Firestore etkileşimlerini yöneten ViewModel.
+/// Grup yönetimi, konum güncellemeleri ve Firebase etkileşimlerini yöneten ViewModel.
+@MainActor
 class GroupViewModel: ObservableObject {
     
     // MARK: - Published Properties for SwiftUI
@@ -13,10 +14,14 @@ class GroupViewModel: ObservableObject {
     @Published var memberLocations: [MemberLocation] = []
     @Published var errorMessage: String?
     @Published var isUpdatingLocation = false
+    @Published var isLoading = false
+    @Published var isCreatingGroup = false
+    @Published var isJoiningGroup = false
     
     // MARK: - Private Properties
-    private let groupService: GroupService
+    private let firebaseGroupService: GroupServiceProtocol
     private let locationManager: LocationManager
+    private var cancellables = Set<AnyCancellable>()
     private let disposeBag = DisposeBag()
     
     // Mevcut kullanıcı kimliği. View'ın erişebilmesi için 'private' değil.
@@ -25,47 +30,45 @@ class GroupViewModel: ObservableObject {
     // MARK: - Initializer
     init(group: HikingGroup? = nil,
          currentUserID: String,
-         groupService: GroupService = GroupService(),
-         locationManager: LocationManager = LocationManager()) {
+         firebaseGroupService: GroupServiceProtocol? = nil,
+         locationManager: LocationManager? = nil) {
         self.group = group
         self.currentUserID = currentUserID
-        self.groupService = groupService
-        self.locationManager = locationManager
+        self.firebaseGroupService = firebaseGroupService ?? FirebaseGroupService()
+        self.locationManager = locationManager ?? LocationManager()
         
-        setupBindings()
+        print("🔧 GroupViewModel initialized with UserID: \(currentUserID)")
+        setupLocationUpdates()
     }
     
-    // MARK: - Rx Bindings
-    private func setupBindings() {
-        // 1. Konum Yöneticisinden gelen güncellemeleri dinle ve Firestore'a yaz
+    // MARK: - Location Setup
+    private func setupLocationUpdates() {
+        // RxSwift'den gelen konum güncellemelerini dinle ve Firebase'e yaz
         locationManager.locationUpdates
             .debounce(.seconds(15), scheduler: MainScheduler.instance)
             .subscribe(onNext: { [weak self] location in
-                self?.updateUserLocationInFirestore(location)
+                Task {
+                    await self?.updateUserLocationInFirebase(location)
+                }
             })
             .disposed(by: disposeBag)
-            
-        // 2. Aktif grup ID'sini dinle
-        let groupIDObservable = $group
+        
+        // Grup değişimlerini dinle ve üye konumlarını güncelle
+        $group
             .compactMap { $0?.id.uuidString }
             .removeDuplicates()
-            .asObservable() // Combine Publisher'ı RxSwift Observable'a çevir
-
-        // 3. Grup ID'si değiştiğinde, yeni grubun konumlarını dinlemeye başla
-        groupIDObservable
-            .flatMapLatest { [weak self] groupId -> Observable<[MemberLocation]> in
-                guard let self = self else { return .empty() }
-                return self.groupService.listenForLocationUpdates(groupId: groupId)
-                    .catch { [weak self] error in
-                        self?.errorMessage = "Üye konumları alınamadı: \(error.localizedDescription)"
-                        return .just([])
-                    }
+            .sink { [weak self] groupId in
+                Task {
+                    await self?.startListeningToMemberLocations(groupId: groupId)
+                }
             }
-            .observe(on: MainScheduler.instance)
-            .subscribe(onNext: { [weak self] locations in
-                self?.memberLocations = locations
-            })
-            .disposed(by: disposeBag)
+            .store(in: &cancellables)
+    }
+    
+    private func startListeningToMemberLocations(groupId: String) async {
+        // Firebase real-time listener ile üye konumlarını dinle
+        // Bu kısım FirebaseGroupService'in real-time listener method'u ile implement edilecek
+        print("📍 Starting to listen member locations for group: \(groupId)")
     }
     
     // MARK: - Public Methods
@@ -78,168 +81,189 @@ class GroupViewModel: ObservableObject {
         locationManager.stopLocationUpdates()
     }
     
-    func createGroup(name: String, memberIDs: [String]) {
-        print("Grup oluşturma işlemi başlatılıyor. Ad: \(name), Üyeler: \(memberIDs)")
-        
-        groupService.createGroup(name: name, memberIDs: memberIDs, leaderId: currentUserID)
-            .flatMap { [unowned self] createdGroupId -> Single<[String: Any]> in
-                print("Grup başarıyla oluşturuldu, ID: \(createdGroupId). Grup bilgisi çekiliyor...")
-                // Oluşturulan grubun bilgilerini çek
-                return self.groupService.fetchGroup(groupId: createdGroupId)
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(onSuccess: { [weak self] groupData in
-                print("Grup bilgisi işleniyor: \(groupData)")
-                
-                let groupUUID = UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID()
-                let groupName = groupData["name"] as? String ?? "Bilinmeyen Grup"
-                let leaderIdString = groupData["leaderId"] as? String
-                
-                print("🏁 Create Group - Leader ID from Firebase: \(leaderIdString ?? "nil")")
-                
-                // Leader ID'yi UUID'ye çevir
-                let leaderId = leaderIdString != nil ? UUID(uuidString: leaderIdString!) : nil
-                
-                // Members alanını String array olarak al ve UUID array'e çevir
-                let membersStringArray = groupData["members"] as? [String] ?? []
-                print("Oluşturulan grup üyeleri: \(membersStringArray)")
-                
-                // String'leri UUID'lere çevir
-                let memberUUIDs = membersStringArray.map { memberString -> UUID in
-                    if let uuid = UUID(uuidString: memberString) {
-                        return uuid
-                    } else {
-                        print("String ID UUID'ye çevriliyor: \(memberString)")
-                        return UUID()
-                    }
-                }
-                
-                let newGroup = HikingGroup(
-                    id: groupUUID,
-                    name: groupName,
-                    memberIDs: memberUUIDs,
-                    leaderId: leaderId
-                )
-                self?.group = newGroup
-                print("Grup başarıyla oluşturuldu ve ayarlandı. Grup: \(groupName), Lider ID: \(leaderId?.uuidString ?? "nil"), Üye sayısı: \(memberUUIDs.count)")
-            }, onFailure: { [weak self] error in
-                print("Grup oluşturma hatası: \(error.localizedDescription)")
-                self?.errorMessage = "Grup oluşturulamadı: \(error.localizedDescription)"
-            })
-            .disposed(by: disposeBag)
-    }
+    // MARK: - Firebase Group Operations
     
-    /// Kullanıcıyı belirtilen gruba dahil eder.
-    /// - Parameter groupId: Katılınacak grubun kimliği.
-    func joinGroup(groupId: String) {
-        print("Gruba katılma işlemi başlatılıyor. GroupID: \(groupId), UserID: \(currentUserID)")
-        
-        groupService.addMemberToGroup(userId: currentUserID, to: groupId)
-            .flatMap { [unowned self] () -> Single<[String: Any]> in
-                print("Kullanıcı başarıyla gruba eklendi, grup bilgisi çekiliyor...")
-                // Üye ekleme başarılı olduktan sonra, güncel grup bilgisini çekiyoruz.
-                return self.groupService.fetchGroup(groupId: groupId)
-            }
-            .observe(on: MainScheduler.instance)
-            .subscribe(onSuccess: { [weak self] groupData in
-                print("Grup bilgisi alındı: \(groupData)")
-                
-                // Firestore'dan gelen veriyi local HikingGroup modeline çevir
-                let groupUUID = UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID()
-                let groupName = groupData["name"] as? String ?? "Bilinmeyen Grup"
-                
-                // Group leader bilgisini al
-                let leaderIdString = groupData["leaderId"] as? String
-                let leaderUUID = leaderIdString != nil ? UUID(uuidString: leaderIdString!) : nil
-                
-                // Members alanını String array olarak al ve UUID array'e çevir
-                let membersStringArray = groupData["members"] as? [String] ?? []
-                print("Firestore'dan gelen üyeler: \(membersStringArray)")
-                print("Firestore'dan gelen grup lideri: \(leaderIdString ?? "Belirtilmemiş")")
-                
-                // String'leri UUID'lere çevir - hatalı UUID'ler için yeni UUID oluştur
-                let memberUUIDs = membersStringArray.map { memberString -> UUID in
-                    if let uuid = UUID(uuidString: memberString) {
-                        return uuid
-                    } else {
-                        // String bir UUID değilse, bu bir user ID'dir (örn: Firebase UID)
-                        // Bu durumda deterministik bir UUID oluşturmak yerine
-                        // Bu String'i UUID namespace ile hash'leyebiliriz
-                        // Şimdilik basit bir çözüm: yeni UUID oluştur
-                        print("Geçersiz UUID formatı: \(memberString), yeni UUID oluşturuluyor")
-                        return UUID()
-                    }
-                }
-                
-                let newGroup = HikingGroup(
-                    id: groupUUID,
-                    name: groupName,
-                    memberIDs: memberUUIDs,
-                    leaderId: leaderUUID // Grup lideri bilgisini set et
-                )
-                self?.group = newGroup
-                print("Başarıyla gruba katıldınız. Grup: \(groupName), Üye sayısı: \(memberUUIDs.count), Lider: \(leaderIdString ?? "Bilinmeyen")")
-            }, onFailure: { [weak self] error in
-                print("Gruba katılım hatası: \(error.localizedDescription)")
-                self?.errorMessage = "Gruba katılım başarısız: \(error.localizedDescription)"
-            })
-            .disposed(by: disposeBag)
-    }
-    
-    // MARK: - Private Helper Methods
-    
-    private func updateUserLocationInFirestore(_ location: CLLocation) {
-        guard let groupId = group?.id.uuidString else {
-            print("❌ GroupViewModel: Cannot update location - no active group")
+    /// Yeni grup oluşturur
+    /// - Parameter name: Grup adı
+    func createGroup(name: String) {
+        guard !name.isEmpty else {
+            errorMessage = "Grup adı boş olamaz"
             return
         }
         
-        print("🗺️ GroupViewModel: Updating location for group \(groupId)")
-        print("🗺️ GroupViewModel: Current user: \(currentUserID)")
-        print("🗺️ GroupViewModel: Location: \(location.coordinate.latitude), \(location.coordinate.longitude)")
+        isCreatingGroup = true
+        isLoading = true
+        errorMessage = nil
+        
+        // Mevcut kullanıcı UUID'ye çevir
+        let currentUserUUID = UUID(uuidString: currentUserID) ?? UUID()
+        
+        // Yeni grup oluştur
+        let newGroup = HikingGroup(
+            id: UUID(),
+            name: name,
+            memberIDs: [currentUserUUID],
+            leaderId: currentUserUUID
+        )
+        
+        // Firebase'e kaydet - Combine ile
+        firebaseGroupService.createGroup(newGroup)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isCreatingGroup = false
+                    self?.isLoading = false
+                    
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = "Grup oluşturulamadı: \(error.localizedDescription)"
+                        print("❌ Grup oluşturma hatası: \(error)")
+                    }
+                },
+                receiveValue: { [weak self] _ in
+                    self?.group = newGroup
+                    print("✅ Grup başarıyla oluşturuldu: \(name)")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    /// Gruba katılır
+    /// - Parameter groupId: Grup ID'si
+    func joinGroup(groupId: String) {
+        guard !groupId.isEmpty else {
+            errorMessage = "Grup ID boş olamaz"
+            return
+        }
+        
+        isJoiningGroup = true
+        isLoading = true
+        errorMessage = nil
+        
+        let currentUserID = self.currentUserID // String olarak kullan
+        
+        firebaseGroupService.joinGroup(groupId: groupId, userId: currentUserID)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isJoiningGroup = false
+                    self?.isLoading = false
+                    
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = "Gruba katılamadı: \(error.localizedDescription)"
+                        print("❌ Gruba katılma hatası: \(error)")
+                    }
+                },
+                receiveValue: { [weak self] _ in
+                    // Grup join edildiğinde grubu yeniden yükle
+                    self?.getGroup(groupId: groupId)
+                    print("✅ Gruba başarıyla katıldı: \(groupId)")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    /// Gruptan ayrılır
+    func leaveGroup() {
+        guard let currentGroup = group else {
+            errorMessage = "Aktif grup bulunamadı"
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        let currentUserID = self.currentUserID // String olarak kullan
+        
+        firebaseGroupService.leaveGroup(groupId: currentGroup.id.uuidString, userId: currentUserID)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = "Gruptan ayrılamadı: \(error.localizedDescription)"
+                        print("❌ Gruptan ayrılma hatası: \(error)")
+                    }
+                },
+                receiveValue: { [weak self] _ in
+                    self?.group = nil
+                    self?.memberLocations = []
+                    print("✅ Gruptan başarıyla ayrıldı")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    /// Belirtilen grup ID'sine sahip grubu getirir
+    /// - Parameter groupId: Grup ID'si
+    func getGroup(groupId: String) {
+        guard !groupId.isEmpty else {
+            errorMessage = "Grup ID boş olamaz"
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        firebaseGroupService.getGroup(id: groupId)
+            .receive(on: DispatchQueue.main)
+            .sink(
+                receiveCompletion: { [weak self] completion in
+                    self?.isLoading = false
+                    
+                    if case .failure(let error) = completion {
+                        self?.errorMessage = "Grup getirilemedi: \(error.localizedDescription)"
+                        print("❌ Grup getirme hatası: \(error)")
+                    }
+                },
+                receiveValue: { [weak self] fetchedGroup in
+                    self?.group = fetchedGroup
+                    print("✅ Grup başarıyla getirildi: \(groupId)")
+                }
+            )
+            .store(in: &cancellables)
+    }
+    
+    /// Kullanıcının konumunu günceller
+    /// - Parameters:
+    ///   - latitude: Enlem
+    ///   - longitude: Boylam
+    func updateUserLocation(latitude: Double, longitude: Double) {
+        guard let currentGroup = group else {
+            print("⚠️ Aktif grup yok, konum güncellemesi yapılmadı")
+            return
+        }
         
         isUpdatingLocation = true
         
-        groupService.updateLocation(
-            groupId: groupId, 
+        let currentUserID = self.currentUserID // String olarak kullan
+        
+        firebaseGroupService.updateMemberLocation(
+            groupId: currentGroup.id.uuidString,
             userId: currentUserID,
-            latitude: location.coordinate.latitude, 
-            longitude: location.coordinate.longitude
+            latitude: latitude,
+            longitude: longitude
         )
-        .observe(on: MainScheduler.instance)
-        .subscribe(onSuccess: { [weak self] in
-            print("✅ GroupViewModel: Location update successful")
-            self?.isUpdatingLocation = false
-        }, onFailure: { [weak self] error in
-            print("❌ GroupViewModel: Location update failed - \(error.localizedDescription)")
-            self?.isUpdatingLocation = false
-            self?.errorMessage = "Konum güncellenemedi: \(error.localizedDescription)"
-        })
-        .disposed(by: disposeBag)
-    }
-}
-
-// MARK: - Combine to RxSwift Bridge
-// Hata düzeltmesi: Bu extension, herhangi bir Combine Publisher'ını RxSwift Observable'ına çevirir.
-extension Publisher {
-    func asObservable() -> Observable<Output> {
-        return Observable.create { observer in
-            let cancellable = self.sink(
-                receiveCompletion: { completion in
-                    switch completion {
-                    case .finished:
-                        observer.onCompleted()
-                    case .failure(let error):
-                        observer.onError(error)
-                    }
-                },
-                receiveValue: { value in
-                    observer.onNext(value)
+        .receive(on: DispatchQueue.main)
+        .sink(
+            receiveCompletion: { [weak self] completion in
+                self?.isUpdatingLocation = false
+                
+                if case .failure(let error) = completion {
+                    self?.errorMessage = "Konum güncellenemedi: \(error.localizedDescription)"
+                    print("❌ Konum güncelleme hatası: \(error)")
                 }
-            )
-            return Disposables.create {
-                cancellable.cancel()
+            },
+            receiveValue: { _ in
+                print("✅ Kullanıcı konumu güncellendi: \(latitude), \(longitude)")
             }
-        }
+        )
+        .store(in: &cancellables)
+    }
+    
+    // MARK: - Private Helpers
+    
+    private func updateUserLocationInFirebase(_ location: CLLocation) async {
+        updateUserLocation(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude)
     }
 }

@@ -1,5 +1,4 @@
 import SwiftUI
-import FirebaseFirestore
 
 struct CreateGroupView: View {
     @ObservedObject var groupVM: GroupViewModel
@@ -64,38 +63,23 @@ struct CreateGroupView: View {
     }
     
     private func createGroup() {
-        // Mevcut kullanıcı ID'sini al
-        let currentUserId = groupVM.currentUserID
+        // GroupViewModel'deki Firebase service metodunu kullan
+        groupVM.createGroup(name: groupName)
         
-        // UUID formatına çevir
+        // UI state'i güncelle
+        let currentUserId = groupVM.currentUserID
         let currentUserUUID = UUID(uuidString: currentUserId) ?? UUID()
+        
         let newGroup = HikingGroup(
-            id: UUID(), 
-            name: groupName, 
-            memberIDs: [currentUserUUID], // Grup liderini üye listesine ekle
-            leaderId: currentUserUUID // Grup lideri bilgisini set et
+            id: UUID(),
+            name: groupName,
+            memberIDs: [currentUserUUID],
+            leaderId: currentUserUUID
         )
         
         createdGroup = newGroup
-        groupVM.group = newGroup
         showQRCode = true
-
-        // Firebase Firestore'a grup ekleme
-        let db = Firestore.firestore()
-        let groupRef = db.collection("groups").document(newGroup.id.uuidString)
-
-        let groupData: [String: Any] = [
-            "name": newGroup.name,
-            "members": newGroup.memberIDs.map { $0.uuidString },
-            "leaderId": newGroup.leaderId?.uuidString ?? currentUserId // Grup lideri bilgisini Firebase'e kaydet
-        ]
-
-        groupRef.setData(groupData) { error in
-            if let error = error {
-                print("❌ CreateGroupView: Grup Firestore'a eklenemedi: \(error.localizedDescription)")
-            } else {
-                print("✅ CreateGroupView: Grup Firestore'a başarıyla eklendi. Lider: \(currentUserId)")
-            }
-        }
+        
+        print("✅ CreateGroupView: Grup oluşturma UI'da tamamlandı: \(groupName)")
     }
 }
