@@ -93,6 +93,12 @@ class GroupViewModel: ObservableObject {
                 
                 let groupUUID = UUID(uuidString: groupData["id"] as? String ?? "") ?? UUID()
                 let groupName = groupData["name"] as? String ?? "Bilinmeyen Grup"
+                let leaderIdString = groupData["leaderId"] as? String
+                
+                print("🏁 Create Group - Leader ID from Firebase: \(leaderIdString ?? "nil")")
+                
+                // Leader ID'yi UUID'ye çevir
+                let leaderId = leaderIdString != nil ? UUID(uuidString: leaderIdString!) : nil
                 
                 // Members alanını String array olarak al ve UUID array'e çevir
                 let membersStringArray = groupData["members"] as? [String] ?? []
@@ -111,10 +117,11 @@ class GroupViewModel: ObservableObject {
                 let newGroup = HikingGroup(
                     id: groupUUID,
                     name: groupName,
-                    memberIDs: memberUUIDs
+                    memberIDs: memberUUIDs,
+                    leaderId: leaderId
                 )
                 self?.group = newGroup
-                print("Grup başarıyla oluşturuldu ve ayarlandı. Grup: \(groupName), Üye sayısı: \(memberUUIDs.count)")
+                print("Grup başarıyla oluşturuldu ve ayarlandı. Grup: \(groupName), Lider ID: \(leaderId?.uuidString ?? "nil"), Üye sayısı: \(memberUUIDs.count)")
             }, onFailure: { [weak self] error in
                 print("Grup oluşturma hatası: \(error.localizedDescription)")
                 self?.errorMessage = "Grup oluşturulamadı: \(error.localizedDescription)"

@@ -51,11 +51,18 @@ struct GroupMapView: View {
     
     /// Üye için harita annotation'ı oluşturur
     private func memberAnnotation(for member: MemberLocation) -> some MapContent {
-        Annotation(member.id, coordinate: member.coordinate) {
-            // Kullanıcı türlerini belirle
-            let isCurrentUser = member.id == viewModel.currentUserID
-            let isGroupLeader = member.id == (viewModel.group?.leaderId?.uuidString ?? "")
-            
+        // Kullanıcı türlerini belirle
+        let isCurrentUser = member.id == viewModel.currentUserID
+        
+        // Leader ID karşılaştırması için hem String hem UUID formatlarını kontrol et
+        let leaderIdString = viewModel.group?.leaderId?.uuidString ?? ""
+        let leaderIdFromUUID = viewModel.group?.leaderId?.uuidString ?? ""
+        let isGroupLeader = member.id == leaderIdString || member.id == leaderIdFromUUID
+        
+        // Debug logging
+        debugMemberInfo(member: member, isCurrentUser: isCurrentUser, isGroupLeader: isGroupLeader)
+        
+        return Annotation(member.id, coordinate: member.coordinate) {
             VStack {
                 // Üye türüne göre farklı simge ve renkler
                 if isCurrentUser {
@@ -69,47 +76,97 @@ struct GroupMapView: View {
         }
     }
     
+    /// Debug bilgilerini yazdırır
+    private func debugMemberInfo(member: MemberLocation, isCurrentUser: Bool, isGroupLeader: Bool) {
+        print("🗺️ Debug - Member ID: \(member.id)")
+        print("🗺️ Debug - Current User ID: \(viewModel.currentUserID)")
+        print("🗺️ Debug - Group Leader ID: \(viewModel.group?.leaderId?.uuidString ?? "nil")")
+        print("🗺️ Debug - Is Current User: \(isCurrentUser)")
+        print("🗺️ Debug - Is Group Leader: \(isGroupLeader)")
+        print("🗺️ Debug - Group Name: \(viewModel.group?.name ?? "nil")")
+        print("🗺️ Debug - ==================")
+    }
+    
     /// Mevcut kullanıcı görünümü
     private func currentUserView() -> some View {
         VStack {
-            Image(systemName: "figure.hiking")
-                .font(.title2)
-                .foregroundColor(.blue)
-                .background(
-                    Circle()
-                        .fill(Color.blue.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                )
+            ZStack {
+                // Ana hiking figürü
+                Image(systemName: "figure.hiking")
+                    .font(.title)
+                    .foregroundColor(.white)
+                    .background(
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 55, height: 55)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.white, lineWidth: 3)
+                            )
+                            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                    )
+                
+                // Küçük konum ikonu
+                Image(systemName: "location.fill")
+                    .font(.caption2)
+                    .foregroundColor(.green)
+                    .background(
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 18, height: 18)
+                    )
+                    .offset(x: 20, y: -20)
+            }
+            
             Text("Sen")
                 .font(.caption)
                 .fontWeight(.bold)
-                .foregroundColor(.blue)
+                .foregroundColor(.green)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.blue.opacity(0.2))
+                .background(Color.green.opacity(0.1))
                 .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.green.opacity(0.4), lineWidth: 1)
+                )
         }
     }
     
     /// Grup lideri görünümü
     private func groupLeaderView() -> some View {
         VStack {
-            Image(systemName: "crown.fill")
-                .font(.title2)
-                .foregroundColor(.orange)
-                .background(
-                    Circle()
-                        .fill(Color.orange.opacity(0.3))
-                        .frame(width: 50, height: 50)
-                )
+            ZStack {
+                // Ana bayrak ikonu
+                Image(systemName: "flag.fill")
+                    .font(.title)
+                    .foregroundColor(.red)
+                    .background(
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 55, height: 55)
+                            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                    )
+                
+                // Küçük hiking figürü üst kısımda
+                Image(systemName: "figure.hiking")
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .offset(y: -15)
+            }
+            
             Text("Lider")
                 .font(.caption)
                 .fontWeight(.bold)
-                .foregroundColor(.orange)
+                .foregroundColor(.red)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .background(Color.orange.opacity(0.2))
+                .background(Color.red.opacity(0.1))
                 .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                )
         }
     }
     
@@ -118,19 +175,28 @@ struct GroupMapView: View {
         VStack {
             Image(systemName: "figure.hiking")
                 .font(.title2)
-                .foregroundColor(.gray)
+                .foregroundColor(.blue)
                 .background(
                     Circle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 40, height: 40)
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 45, height: 45)
+                        .overlay(
+                            Circle()
+                                .stroke(Color.blue.opacity(0.4), lineWidth: 2)
+                        )
                 )
+            
             Text("Üye")
                 .font(.caption)
-                .foregroundColor(.gray)
+                .foregroundColor(.blue)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 2)
-                .background(Color.gray.opacity(0.1))
+                .background(Color.blue.opacity(0.1))
                 .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                )
         }
     }
 }
