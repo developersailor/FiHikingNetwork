@@ -15,6 +15,8 @@ struct ProfileView: View {
                 .foregroundColor(.textColor(for: .primaryGreen))
             Text("Kullanıcı Adı: \(userVM.user?.username ?? "-")")
                 .foregroundColor(.textColor(for: .primaryGreen))
+            Text("Email: \(userVM.user?.email ?? "-")")
+                .foregroundColor(.textColor(for: .primaryGreen))
             Text("Telefon: \(userVM.user?.phone ?? "-")")
                 .foregroundColor(.textColor(for: .primaryGreen))
 
