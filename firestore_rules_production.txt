@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Kullanıcılar sadece kendi dokümanlarını okuyup yazabilir
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Gruplar: sadece giriş yapmış kullanıcılar okuyabilir ve yazabilir
+    match /groups/{groupId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Grup içi konumlar: basitleştirilmiş izinler
+    match /groups/{groupId}/locations/{userId} {
+      // Tüm giriş yapmış kullanıcılar tüm konumları okuyabilir (harita görünümü için)
+      allow read: if request.auth != null;
+      
+      // Sadece kendi konum dokümanını yazabilir
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Proximity event'leri: sadece giriş yapmış kullanıcılar yazabilir/okuyabilir
+    match /groups/{groupId}/proximityEvents/{eventId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

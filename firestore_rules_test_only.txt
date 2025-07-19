@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // GEÇİCİ TEST KURALLARI - ÜRETİMDE KULLANMAYIN!
+    match /{document=**} {
+      allow read, write: if true; // Herkese tam erişim - sadece test için!
+    }
+  }
+}
+
+// NORMAL KURALLAR (Test bittikten sonra bunları kullanın):
+/*
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Kullanıcılar sadece kendi dokümanlarını okuyup yazabilir
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Gruplar: sadece giriş yapmış kullanıcılar okuyabilir ve yazabilir
+    match /groups/{groupId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Grup içi konumlar: tüm giriş yapmış kullanıcılar okuyabilir
+    match /groups/{groupId}/locations/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Proximity event'leri
+    match /groups/{groupId}/proximityEvents/{eventId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+*/

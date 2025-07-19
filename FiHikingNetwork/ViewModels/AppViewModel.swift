@@ -16,6 +16,9 @@ class AppViewModel: ObservableObject {
     /// Uygulamanın genel durumunu belirtir.
     @Published private(set) var appState: AppState = .loading
     
+    /// Kullanıcı profili oluşturuldu mu kontrolü
+    @Published var hasUserProfile: Bool = false
+    
     // MARK: - Private Properties
     
     private let authService: AuthService
@@ -45,9 +48,22 @@ class AppViewModel: ObservableObject {
     /// Kullanıcı ID'sine göre uygulama durumunu günceller.
     private func updateAppState(userID: String?) {
         if let userID = userID, !userID.isEmpty {
-            self.appState = .signedIn
+            // Kullanıcı giriş yapmış, profil kontrolü yap
+            if hasUserProfile {
+                self.appState = .signedIn
+            } else {
+                self.appState = .signedOut // Onboarding göster
+            }
         } else {
             self.appState = .signedOut
+        }
+    }
+    
+    /// Profil oluşturulduğunu belirt ve ana ekrana geç
+    func setUserProfileCreated() {
+        hasUserProfile = true
+        if currentUserID != nil {
+            self.appState = .signedIn
         }
     }
     

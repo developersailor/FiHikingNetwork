@@ -42,6 +42,15 @@ struct AuthView: View {
                         .cornerRadius(8)
                 }
 
+                Button(action: signInAnonymously) {
+                    Text("Anonim Giriş")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.7))
+                        .foregroundColor(.white)
+                        .cornerRadius(8)
+                }
+
                 Spacer()
             }
             .padding()
@@ -78,6 +87,18 @@ struct AuthView: View {
             }
             self.errorMessage = nil
             print("Kayıt başarılı: \(result?.user.email ?? "")")
+            isAuthenticated = true
+        }
+    }
+
+    private func signInAnonymously() {
+        Auth.auth().signInAnonymously { result, error in
+            if let error = error {
+                self.errorMessage = "Anonim giriş başarısız: \(error.localizedDescription)"
+                return
+            }
+            self.errorMessage = nil
+            print("Anonim giriş başarılı: \(result?.user.uid ?? "")")
             isAuthenticated = true
         }
     }
